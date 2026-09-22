@@ -1,4 +1,4 @@
-"""Load raw Freddie Mac files from S3 into the Snowflake bronze layer."""
+"""Load raw Freddie Mac files from S3 into the Databricks bronze layer."""
 
 import sys
 from pathlib import Path

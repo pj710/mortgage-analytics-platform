@@ -5,11 +5,10 @@ aws:
   s3_bucket: jo-map
   s3_prefix: jo-map
 
-snowflake:
-  warehouse: MAP_WH
-  database: MORTGAGE_ANALYTICS
-  bronze_schema: BRONZE
-  role: SYSADMIN
+databricks:
+  catalog: map
+  bronze_schema: bronze
+  core_schema: core
 
 paths:
   data_root: data
