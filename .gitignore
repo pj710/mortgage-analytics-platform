@@ -10,15 +10,25 @@ venv/
 .env
 .env.*
 
+# Secrets / credentials
+rootkey.csv
+*.pem
+*.key
+
 # Data artifacts
 *.csv
 *.parquet
 *.feather
 *.pkl
 
-# Editor
+# Editor / OS
 .vscode/
+.idea/
 .DS_Store
+Thumbs.db
+
+# Logs
+*.log
 
 # Test / build
 .pytest_cache/
@@ -28,3 +38,9 @@ htmlcov/
 build/
 dist/
 *.egg-info/
+
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+dbt/.user.yml

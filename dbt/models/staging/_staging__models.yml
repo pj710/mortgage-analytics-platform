@@ -1,0 +1,39 @@
+version: 2
+
+models:
+  - name: stg_originations
+    description: "{{ doc('stg_originations') }}"
+    columns:
+      - name: loan_identifier
+        description: Freddie Mac loan sequence number; one row expected per loan.
+        tests:
+          - not_null
+          - unique
+      - name: credit_score
+        description: Classic FICO score at origination (nullable — some loans only report VantageScore).
+      - name: original_ltv
+        description: Original loan-to-value ratio, percent.
+      - name: original_cltv
+        description: Original combined loan-to-value ratio, percent.
+      - name: first_payment_date
+        description: First scheduled payment date, parsed from the raw YYYYMM string.
+
+  - name: stg_performance
+    description: "{{ doc('stg_performance') }}"
+    columns:
+      - name: loan_identifier
+        description: Foreign key to stg_originations.loan_identifier.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_originations')
+                field: loan_identifier
+      - name: period_date
+        description: First day of the reporting month, parsed from the raw YYYYMM period.
+        tests:
+          - not_null
+      - name: delinquency_months
+        description: >
+          Numeric months delinquent, normalized from current_loan_delinquency_status
+          (non-numeric codes such as R/RA/XX become NULL).

@@ -1,0 +1,51 @@
+version: 2
+
+models:
+  - name: dim_loan
+    description: "{{ doc('dim_loan') }}"
+    columns:
+      - name: loan_identifier
+        description: Natural key — one row per Freddie Mac loan.
+        tests:
+          - unique
+          - not_null
+      - name: vintage_year
+        description: Calendar year of the first scheduled payment date; used for vintage/cohort analysis.
+      - name: vintage_quarter
+        description: Calendar quarter (1-4) of the first scheduled payment date.
+
+  - name: dim_geography
+    description: "{{ doc('dim_geography') }}"
+    columns:
+      - name: geography_key
+        description: SHA-256 hash surrogate key of (property_state, msa_code, postal_code).
+        tests:
+          - unique
+          - not_null
+
+  - name: dim_period
+    description: "{{ doc('dim_period') }}"
+    columns:
+      - name: period_date
+        description: First day of the reporting month.
+        tests:
+          - unique
+          - not_null
+
+  - name: fact_loan_performance
+    description: "{{ doc('fact_loan_performance') }}"
+    columns:
+      - name: loan_identifier
+        description: Foreign key to dim_loan.loan_identifier.
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_loan')
+                field: loan_identifier
+      - name: period_date
+        description: Reporting month for this performance snapshot.
+        tests:
+          - not_null
+      - name: delinquency_bucket
+        description: "Current / 30-59 DPD / 60-89 DPD / 90+ DPD / Closed / Unknown, from the delinquency_bucket() macro."

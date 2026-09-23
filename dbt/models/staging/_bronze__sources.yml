@@ -1,0 +1,30 @@
+version: 2
+
+sources:
+  - name: bronze
+    database: "{{ env_var('DATABRICKS_CATALOG', 'map') }}"
+    schema: bronze
+    description: "{{ doc('bronze_sources') }}"
+    tables:
+      - name: originations_raw
+        description: >
+          One row per Freddie Mac Single-Family Loan-Level origination record,
+          landed as-is (all STRING columns) by load_s3_to_databricks.py.
+        columns:
+          - name: loan_identifier
+            description: Freddie Mac loan sequence number.
+            tests:
+              - not_null
+      - name: performance_raw
+        description: >
+          One row per loan per monthly reporting period, landed as-is (all
+          STRING columns) by load_s3_to_databricks.py.
+        columns:
+          - name: loan_identifier
+            description: Freddie Mac loan sequence number.
+            tests:
+              - not_null
+          - name: period
+            description: Reporting period in raw YYYYMM string form.
+            tests:
+              - not_null
