@@ -9,6 +9,7 @@ databricks:
   catalog: map
   bronze_schema: bronze
   core_schema: core
+  marts_schema: marts
 
 paths:
   data_root: data

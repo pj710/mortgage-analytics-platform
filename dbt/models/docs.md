@@ -70,3 +70,42 @@ Adds `delinquency_bucket` (Current / 30-59 DPD / 60-89 DPD / 90+ DPD / Closed / 
 via the shared `delinquency_bucket()` macro from `delinquency_months` and `zero_balance_code`, to
 directly support the charter's delinquency-bucket and roll-rate metrics (charter section 10).
 {% enddocs %}
+
+{% docs int_loan_latest_snapshot %}
+Grain: one row per `loan_identifier`, keeping only that loan's most recent `fact_loan_performance`
+row (`row_number()` over `period_date desc`). Marts that need a loan's *current* status — rather
+than its full monthly history — join to this model instead of re-deriving "latest" logic
+themselves (e.g. `mart_geography_summary`).
+{% enddocs %}
+
+{% docs mart_portfolio_monthly_summary %}
+Grain: one row per (`period_date`, `delinquency_bucket`). Aggregates `fact_loan_performance` into
+the loan-count, current-UPB, and delinquency-bucket metrics from charter section 7, using
+`weighted_average()` for the UPB-weighted average current interest rate rather than a naive
+`avg()`. Drives the portfolio-overview and delinquency-trend dashboard views.
+{% enddocs %}
+
+{% docs mart_vintage_summary %}
+Grain: one row per (`vintage_year`, `vintage_quarter`). Aggregates `dim_loan` into origination-time
+weighted averages (LTV, CLTV, credit score, interest rate) via `weighted_average()`, each
+null-safe so loans missing a given attribute don't distort other loans' weights. Drives the
+vintage/cohort-analysis dashboard view (charter section 7).
+{% enddocs %}
+
+{% docs mart_geography_summary %}
+Grain: one row per `property_state` (`'UNKNOWN'` where missing). Combines `dim_loan` origination
+attributes with each loan's current status from `int_loan_latest_snapshot` to give a
+point-in-time view of UPB, weighted-average LTV/credit score, and serious (90+ DPD) delinquency
+rate by state. Drives the geography/concentration dashboard view.
+{% enddocs %}
+
+{% docs mart_loss_summary %}
+Grain: one row per `vintage_year`. A loan is treated as a liquidation/credit-loss event when its
+`zero_balance_code` is `02` (third-party sale), `03` (short sale/short payoff), or `09` (REO
+disposition) — Freddie Mac's codes for a realized credit loss. `01` (prepaid/matured) and `06`
+(repurchase) are deliberately excluded as they are not credit losses. `loss_severity` is
+`actual_loss` divided by the loan's UPB at the liquidation record (not its original UPB), which is
+the standard definition. This is an interpretive judgment call documented here per charter
+architecture principle 4 ("favor transparent, reviewable calculations"); adjust the code list if a
+different loss definition is required.
+{% enddocs %}

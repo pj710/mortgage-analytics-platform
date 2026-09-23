@@ -20,6 +20,7 @@ vars:
   bronze_schema: bronze
   staging_schema: staging
   core_schema: core
+  marts_schema: marts
 
 models:
   mortgage_analytics:
@@ -29,3 +30,6 @@ models:
     core:
       +materialized: table
       +schema: core
+    marts:
+      +materialized: table
+      +schema: marts

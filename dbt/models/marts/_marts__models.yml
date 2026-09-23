@@ -1,0 +1,54 @@
+version: 2
+
+models:
+  - name: int_loan_latest_snapshot
+    description: "{{ doc('int_loan_latest_snapshot') }}"
+    columns:
+      - name: loan_identifier
+        description: Foreign key to dim_loan.loan_identifier.
+        tests:
+          - unique
+          - not_null
+
+  - name: mart_portfolio_monthly_summary
+    description: "{{ doc('mart_portfolio_monthly_summary') }}"
+    columns:
+      - name: period_date
+        description: Reporting month for this summary row.
+        tests:
+          - not_null
+      - name: delinquency_bucket
+        description: Current / 30-59 DPD / 60-89 DPD / 90+ DPD / Closed / Unknown.
+        tests:
+          - not_null
+      - name: loan_count
+        description: Distinct loans in this period/bucket.
+
+  - name: mart_vintage_summary
+    description: "{{ doc('mart_vintage_summary') }}"
+    columns:
+      - name: vintage_year
+        description: Calendar year of first scheduled payment date.
+        tests:
+          - not_null
+      - name: loan_count
+        description: Distinct loans originated in this vintage year/quarter.
+
+  - name: mart_geography_summary
+    description: "{{ doc('mart_geography_summary') }}"
+    columns:
+      - name: property_state
+        description: Two-letter property state code (or 'UNKNOWN' if missing).
+        tests:
+          - unique
+          - not_null
+
+  - name: mart_loss_summary
+    description: "{{ doc('mart_loss_summary') }}"
+    columns:
+      - name: vintage_year
+        description: Calendar year of first scheduled payment date for liquidated loans.
+        tests:
+          - not_null
+      - name: liquidated_loan_count
+        description: Distinct loans with a credit-loss zero-balance code (02/03/09) in this vintage year.
