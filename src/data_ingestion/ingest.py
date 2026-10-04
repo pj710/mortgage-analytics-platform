@@ -17,6 +17,11 @@ def get_settings():
         if value:
             os.environ[key] = value.strip()
 
+    # Without this, botocore computes a client-side checksum on every upload; without the
+    # crc32c C extension installed, that falls back to a pure-Python hash that is orders of
+    # magnitude slower, making uploads of our larger (multi-10MB+) sample files appear to hang.
+    os.environ.setdefault("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required")
+
     # An empty AWS_PROFILE makes boto3 fail, so drop it if it has no value.
     if not os.getenv("AWS_PROFILE", "").strip():
         os.environ.pop("AWS_PROFILE", None)
