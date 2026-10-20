@@ -45,6 +45,7 @@ src/data_ingestion/         Python ingestion library (S3 upload, Databricks bron
 scripts/                    Thin CLI entry points that call the ingestion library
 dbt/                        dbt project: staging + core/marts models, macros, tests, docs
 airflow/dags/               Airflow DAG orchestrating the end-to-end pipeline
+docker/                     Dockerfile + Compose stack for running Airflow with a PostgreSQL metadata DB
 ```
 
 ## Prerequisites
@@ -52,6 +53,9 @@ airflow/dags/               Airflow DAG orchestrating the end-to-end pipeline
 - Python 3.9+
 - An AWS account/IAM user with access to an S3 bucket
 - A Databricks workspace with Unity Catalog and a SQL warehouse
+- Docker Desktop (or Docker Engine + Compose v2) — only needed for the
+  Docker-based Airflow deployment; the local-venv Airflow setup doesn't
+  require it
 
 ## Setup
 
@@ -124,6 +128,46 @@ runs the full pipeline (upload to S3 → load Databricks bronze → `dbt run` �
 under `data/` is newer than the last successfully processed run — an mtime
 watermark stored in an Airflow Variable, since this project polls local files
 rather than wiring up real S3 event notifications.
+
+### Docker (PostgreSQL metadata DB)
+
+The quickest way to run Airflow for this project, with a PostgreSQL metadata
+database instead of SQLite. From the repo root:
+
+```bash
+cp docker/.env.example docker/.env   # adjust AIRFLOW_UID (Linux) / admin creds if desired
+cd docker
+docker compose up --build
+```
+
+This builds a custom Airflow 2.9.3 image (see
+[docker/airflow/Dockerfile](docker/airflow/Dockerfile)) with the extra
+packages the DAG's Python tasks need (`boto3`, `databricks-sql-connector`,
+`databricks-sdk`, etc.) installed into Airflow's environment, and
+`dbt-databricks` installed into its own isolated virtualenv at
+`/opt/dbt-venv` inside the image — mirroring the `.venv` / `.venv-airflow`
+split used below, so the two dependency sets never conflict. The DAG is
+pointed at that venv via the `DBT_BIN` environment variable, set in
+[docker/docker-compose.yaml](docker/docker-compose.yaml); no code change is
+needed to switch between the local venv and Docker.
+
+The whole repo is bind-mounted into the containers, so `.env`,
+`config/config.yaml`, `data/`, `dbt/`, and `src/` are all visible to the DAG
+exactly as they are on the host — edit files locally and rerun the DAG, no
+rebuild required (a rebuild is only needed after changing
+`docker/airflow/requirements-*.txt`).
+
+Once the stack is healthy, open http://localhost:8080 (default login
+`airflow` / `airflow`, or whatever you set in `docker/.env`), unpause
+`mortgage_analytics_pipeline`, and trigger it. Airflow's metadata — DAG runs,
+task state, and the `mortgage_analytics_pipeline_last_processed_mtime`
+watermark Variable — now persists in the `postgres` service's
+`postgres-db-volume` Docker volume across container restarts.
+
+Stop the stack with `docker compose down` (add `-v` to also drop the Postgres
+volume and start over).
+
+### Local virtualenv (SQLite, standalone)
 
 Airflow is intentionally not pinned in `requirements.txt` and must NOT be
 installed into the project's `.venv` — its pinned dependencies (protobuf,

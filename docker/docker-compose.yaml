@@ -1,0 +1,121 @@
+# Airflow (LocalExecutor) backed by PostgreSQL for the mortgage analytics
+# pipeline. Adapted from Apache Airflow's reference docker-compose.yaml
+# (https://airflow.apache.org/docs/apache-airflow/2.9.3/docker-compose.yaml),
+# trimmed from CeleryExecutor+Redis down to LocalExecutor since this project
+# runs a single DAG and doesn't need distributed workers.
+#
+# WARNING: This configuration is for local development / demo use, not
+# production.
+#
+# Supported variables (set in docker/.env, see docker/.env.example):
+#   AIRFLOW_UID                  - host UID containers run as (Linux bind-mount
+#                                   permissions). Default: 50000
+#   _AIRFLOW_WWW_USER_USERNAME   - webserver admin username. Default: airflow
+#   _AIRFLOW_WWW_USER_PASSWORD   - webserver admin password. Default: airflow
+#
+# Usage (from the docker/ directory):
+#   docker compose up --build
+# Then open http://localhost:8080 (airflow/airflow by default).
+
+x-airflow-common:
+  &airflow-common
+  build:
+    context: ..
+    dockerfile: docker/airflow/Dockerfile
+  image: mortgage-analytics-airflow:2.9.3
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    # mortgage_analytics_pipeline_dag.py derives PROJECT_ROOT from its own
+    # path (parents[2]), so the whole repo is mounted below such that
+    # /opt/airflow/project/airflow/dags matches that layout.
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/project/airflow/dags
+    # Points the DAG's dbt subprocess calls at the isolated dbt venv built
+    # into the image instead of the default local-dev .venv/bin/dbt path.
+    DBT_BIN: /opt/dbt-venv/bin/dbt
+  volumes:
+    # Whole repo, read-write: the DAG, src/, dbt/ (incl. profiles.yml and
+    # writable target/+logs/), config/, data/, and .env all need to be
+    # visible at the same relative paths the DAG code expects.
+    - ../:/opt/airflow/project
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username "${_AIRFLOW_WWW_USER_USERNAME:-airflow}" \
+          --password "${_AIRFLOW_WWW_USER_PASSWORD:-airflow}" \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com || true
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+volumes:
+  postgres-db-volume:

@@ -1,0 +1,22 @@
+# Build context for docker/airflow/Dockerfile is the repo root (docker/docker-compose.yaml
+# uses `context: ..`). None of this is needed inside the image -- the whole
+# repo is bind-mounted at runtime instead (see docker/docker-compose.yaml).
+.git/
+.venv/
+.venv-airflow/
+airflow/logs/
+airflow/airflow.db
+airflow/airflow.cfg
+airflow/standalone_admin_password.txt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+data/
+**/__pycache__/
+*.pyc
+.DS_Store
+.env
+.env.*
+rootkey.csv
+*.pem
+*.key

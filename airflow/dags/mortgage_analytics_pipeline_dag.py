@@ -2,8 +2,7 @@
 
 "Process once uploaded" is approximated with an mtime watermark stored in an
 Airflow Variable (polled on a schedule) rather than a true S3/file event
-trigger -- see mortgage-analytics-project-charter.md for why simplicity was
-chosen over an event-driven design for this portfolio project.
+trigger mechanism.
 """
 
 import os
@@ -17,13 +16,14 @@ from airflow.models import Variable
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DBT_DIR = PROJECT_ROOT / "dbt"
-# dbt-databricks pins conflict with Airflow's deps, so dbt lives in its own
-# venv (.venv) instead of whatever env is running Airflow (.venv-airflow).
-DBT_BIN = PROJECT_ROOT / ".venv" / "bin" / "dbt"
+# dbt-databricks pins conflict with Airflow's dependencies, so dbt lives in its own
+# venv (.venv) instead of default env. for running Airflow (.venv-airflow).
+
+DBT_BIN = Path(os.environ.get("DBT_BIN", str(PROJECT_ROOT / ".venv" / "bin" / "dbt")))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from data_ingestion.ingest import find_files, get_settings as get_ingest_settings  # noqa: E402
-from data_ingestion.load_s3_to_databricks import load_s3_to_bronze  # noqa: E402
+from data_ingestion.ingest import find_files, get_settings as get_ingest_settings  
+from data_ingestion.load_s3_to_databricks import load_s3_to_bronze 
 
 WATERMARK_VAR = "mortgage_analytics_pipeline_last_processed_mtime"
 PENDING_WATERMARK_VAR = f"{WATERMARK_VAR}_pending"
@@ -38,8 +38,8 @@ def _dbt_env():
         if value:
             env[key] = value.strip()
     env["DBT_PROFILES_DIR"] = "."
+    
     return env
-
 
 def _run_dbt(*args):
     result = subprocess.run(
@@ -47,6 +47,7 @@ def _run_dbt(*args):
     )
     print(result.stdout)
     print(result.stderr)
+    
     if result.returncode != 0:
         raise RuntimeError(f"dbt {' '.join(args)} failed (exit {result.returncode})")
 
@@ -81,7 +82,7 @@ def mortgage_analytics_pipeline():
     @task
     def upload_to_s3():
         from data_ingestion import load_to_s3
-
+        
         load_to_s3()
 
     @task
