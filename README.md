@@ -1,9 +1,6 @@
 # Mortgage Analytics Platform
 
-A U.S. residential mortgage analytics data platform built on the Freddie Mac
-Single-Family Loan-Level Dataset. Raw origination and monthly performance
-files are landed in S3, loaded into a Databricks lakehouse bronze layer, and
-transformed with dbt into a canonical, documented, and tested core schema for
+This datalake-house supports enterprise wide mortgage analytics, including data science/predictive modeling. Data models are built on the Freddie Mac Single-Family Loan-Level Datasets from 2024-2026. An Airflow DAG is scheduled yearly to load raw origination and performance text files from local directory into AWS S3 datalake, then the raw data is loaded into a Databricks hosted DataWarehouse bronze layer, and transformed with dbt into a canonical, documented, and tested core schema for
 portfolio, delinquency, vintage, and loss analysis.
 
 See [mortgage-analytics-project-charter.md](mortgage-analytics-project-charter.md)
