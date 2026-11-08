@@ -1,13 +1,26 @@
-"""Upload local data files to S3, keeping the same folder structure."""
+"""Upload local data files to S3 (raw pipe-delimited files as parquet), keeping the same folder structure."""
 
 import os
+import tempfile
 from pathlib import Path
 
 import boto3
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 import yaml
 import dotenv
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+from .schema import PROJECT_ROOT, read_header_columns
+
+CHUNK_ROWS = 500_000
+
+# Raw pipe-delimited datasets are stored in S3 as parquet. Maps each dataset's
+# config.yaml paths key to the header file defining its column names.
+RAW_DATASETS = {
+    "originations_data": "origination_data_file_header.txt",
+    "performance_data": "performance_data_file_header.txt",
+}
 
 
 def get_settings():
@@ -42,6 +55,40 @@ def get_settings():
     return data_root, s3_bucket, s3_prefix, aws_region
 
 
+def raw_dataset_headers():
+    """Map each raw dataset directory to the header file naming its columns."""
+    with open(PROJECT_ROOT / "config" / "config.yaml", encoding="utf-8") as config_file:
+        paths = yaml.safe_load(config_file)["paths"]
+    return {(PROJECT_ROOT / paths[key]).resolve(): header for key, header in RAW_DATASETS.items()}
+
+
+def convert_to_parquet(source_file, header_file, target_file):
+    """Stream a pipe-delimited file into parquet in chunks; every column is kept as a string."""
+    columns = read_header_columns(header_file)
+    writer = None
+    try:
+        reader = pd.read_csv(
+            source_file,
+            sep="|",
+            header=None,
+            names=columns,
+            dtype=str,
+            keep_default_na=False,
+            na_values=[""],
+            chunksize=CHUNK_ROWS,
+        )
+        for chunk in reader:
+            table = pa.Table.from_pandas(chunk, preserve_index=False)
+            if writer is None:
+                writer = pq.ParquetWriter(target_file, table.schema, compression="snappy")
+            writer.write_table(table)
+    finally:
+        if writer is not None:
+            writer.close()
+    if writer is None:
+        raise ValueError(f"No rows found in {source_file}")
+
+
 def find_files(data_root):
     """Return every non-hidden file under data_root."""
     return sorted(
@@ -61,11 +108,24 @@ def load_to_s3(settings=None):
     if not files:
         raise FileNotFoundError(f"No files found under data directory: {data_root}")
 
+    dataset_headers = raw_dataset_headers()
     s3_client = boto3.client("s3", region_name=aws_region)
-    for local_file in files:
-        relative_path = local_file.relative_to(data_root).as_posix()
-        s3_key = f"{s3_prefix}/{relative_path}" if s3_prefix else relative_path
-        print(f"Uploading {local_file} to s3://{s3_bucket}/{s3_key}")
-        s3_client.upload_file(str(local_file), s3_bucket, s3_key)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        for local_file in files:
+            relative_path = local_file.relative_to(data_root)
+            upload_file = local_file
+            header_file = dataset_headers.get(local_file.parent.resolve())
+            if header_file and local_file.suffix.lower() == ".txt":
+                relative_path = relative_path.with_suffix(".parquet")
+                upload_file = Path(temp_dir) / relative_path.name
+                print(f"Converting {local_file} to parquet")
+                convert_to_parquet(local_file, header_file, upload_file)
+
+            relative_key = relative_path.as_posix()
+            s3_key = f"{s3_prefix}/{relative_key}" if s3_prefix else relative_key
+            print(f"Uploading {upload_file} to s3://{s3_bucket}/{s3_key}")
+            s3_client.upload_file(str(upload_file), s3_bucket, s3_key)
+            if upload_file != local_file:
+                upload_file.unlink()
 
     print(f"Uploaded {len(files)} file(s) to s3://{s3_bucket}/{s3_prefix}/")

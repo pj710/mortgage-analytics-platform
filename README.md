@@ -12,7 +12,7 @@ for full project scope, objectives, and metric definitions.
 Local sample files (data/freddie_raw/)
         │  scripts/ingest_sample_data_to_s3.py
         ▼
-Amazon S3
+Amazon S3 (raw files stored as parquet)
         │  scripts/load_s3_to_databricks_bronze.py  (COPY INTO)
         ▼
 Databricks bronze schema (raw, untyped STRING columns)
