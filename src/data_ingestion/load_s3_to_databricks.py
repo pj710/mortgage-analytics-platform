@@ -1,4 +1,4 @@
-"""Copy raw Freddie Mac files from S3 into the Databricks bronze layer."""
+"""Copy raw Freddie Mac parquet files from S3 into the Databricks bronze layer."""
 
 import os
 import re
@@ -9,6 +9,8 @@ import dotenv
 import yaml
 from databricks import sql
 from databricks.sdk.core import Config
+
+from .schema import read_header_columns
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -81,18 +83,6 @@ def get_settings():
     }
 
 
-def sanitize_column_name(raw_name):
-    """Turn a raw pipe-delimited header field into a valid Databricks column name."""
-    name = re.sub(r"[^A-Za-z0-9]+", "_", raw_name.strip().lower())
-    return name.strip("_")
-
-
-def read_header_columns(header_file):
-    """Read a pipe-delimited header file and return sanitized column names, in order."""
-    raw_header = (PROJECT_ROOT / "data" / "headers" / header_file).read_text(encoding="utf-8").strip()
-    return [sanitize_column_name(field) for field in raw_header.split("|")]
-
-
 def dataset_s3_subpath(paths, path_key):
     """Return a dataset's folder path relative to the data root (e.g. freddie_raw/originations)."""
     return Path(paths[path_key]).relative_to(Path(paths["data_root"])).as_posix()
@@ -151,7 +141,7 @@ def copy_into_bronze(cursor, catalog, bronze_schema, table, columns, bucket, pre
     """
     aws_key_id, aws_secret_key, aws_session_token = aws_credentials
     source_path = f"s3://{bucket}/{prefix}/{stage_subpath}/" if prefix else f"s3://{bucket}/{stage_subpath}/"
-    select_columns = ", ".join(f"_c{i}::string AS {col}" for i, col in enumerate(columns))
+    select_columns = ", ".join(f"{col}::string AS {col}" for col in columns)
     cursor.execute(
         f"""
         COPY INTO {catalog}.{bronze_schema}.{table}
@@ -163,8 +153,8 @@ def copy_into_bronze(cursor, catalog, bronze_schema, table, columns, bucket, pre
                 AWS_SESSION_TOKEN = '{aws_session_token}'
             ))
         )
-        FILEFORMAT = CSV
-        FORMAT_OPTIONS ('delimiter' = '|', 'header' = 'false')
+        FILEFORMAT = PARQUET
+        PATTERN = '*.parquet'
         COPY_OPTIONS ('mergeSchema' = 'true')
         """
     )
